@@ -601,6 +601,8 @@ function handle_generate_pdf_request() {
 	if (json_last_error() !== JSON_ERROR_NONE || !is_array($output_data)) {
 		error_log('🔴 JSON Decode Error: ' . json_last_error_msg());
 		error_log('🔴 Raw OpenAI Response: ' . $openai_json);
+		log_openai_error('🔴 Raw OpenAI Response: ', $openai_json);
+
 		echo '❌ Invalid JSON returned from OpenAI.';
 		exit;
 	}
@@ -608,6 +610,7 @@ function handle_generate_pdf_request() {
 	// 🚨 Check if OpenAI returned an error object
 	if (isset($output_data['error'])) {
 		error_log('🔴 OpenAI error: ' . print_r($output_data['error'], true));
+		log_openai_error('🔴 OpenAI error', print_r($output_data['error'], true));
 		echo '❌ OpenAI error: ' . esc_html($output_data['error']['message'] ?? 'Unknown error');
 		exit;
 	}
@@ -956,6 +959,7 @@ function call_openai_api($prompt) {
 	$api_key = defined('OPENAI_API_KEY') ? OPENAI_API_KEY : null;
 
 	if (!$api_key) {
+		log_openai_error('🔴 Missing OpenAI API key.', 'Function: call_openai_api | User: ' . get_current_user_id());
 		error_log('🔴 Missing OpenAI API key.');
 		return json_encode(['error' => 'Missing API key.']);
 	}
@@ -991,6 +995,7 @@ function call_openai_api($prompt) {
 	if (is_wp_error($response)) {
 		$error_message = $response->get_error_message();
 		error_log("🔴 OpenAI API request failed: $error_message");
+		log_openai_error('🔴 OpenAI API request failed.', $error_message);
 		return json_encode(['error' => 'OpenAI request failed.', 'details' => $error_message]);
 	}
 
@@ -1000,11 +1005,13 @@ function call_openai_api($prompt) {
 
 	if (!isset($body['choices'][0]['message']['content'])) {
 		error_log('🔴 Unexpected OpenAI API response structure: ' . $body_raw);
+		log_openai_error('🔴 Unexpected OpenAI API response structure:', $error_message);
 		return json_encode(['error' => 'Invalid OpenAI response structure.']);
 	}
 
 	$content = trim($body['choices'][0]['message']['content']);
 	error_log('🟡 Raw OpenAI content: ' . $content);
+	log_openai_error('🟡 Raw OpenAI content:', $content);
 
 	// 🧠 Try to extract valid JSON from response string
 	$json = extract_json_from_string($content);
@@ -1014,6 +1021,7 @@ function call_openai_api($prompt) {
 
 	// 🚨 Fallback
 	error_log('🔴 Failed to extract valid JSON from OpenAI response.');
+	log_openai_error('🔴 Failed to extract valid JSON from OpenAI response.', $content);
 	return json_encode(['error' => 'Invalid JSON response from OpenAI.']);
 }
 
