@@ -182,6 +182,47 @@ function save_answers($answers, $user_id, $section_id, $existing_post_id, $is_co
 		update_post_meta($answer_post_id, 'userid', $user_id);
 		update_post_meta($answer_post_id, 'is_completed', $is_complete ? 1 : 0);
 	}
+	
+	// If section is fully complete, generate PDF JCM
+    if ($is_complete) {
+        // 1. Build OpenAI prompt
+        $prompt = build_filled_prompt_from_section($section_id, $user_id);
+        $openai_json = call_openai_api($prompt);
+
+        // 2. Validate OpenAI output
+        $output_data = json_decode($openai_json, true);
+        if (!is_array($output_data)) {
+            error_log('Section PDF Generation Failed: Invalid JSON from OpenAI');
+            return;
+        }
+
+        // 3. Load PDF template
+        $template_html = get_post_meta($section_id, 'pdf_template', true);
+        if (!$template_html) {
+            error_log('Section PDF Generation Failed: No template found for section ' . $section_id);
+            return;
+        }
+
+        // 4. Replace placeholders
+        $flattened = flatten_placeholders($output_data);
+        foreach ($flattened as $key => $value) {
+            $template_html = str_replace($key, $value, $template_html);
+        }
+
+        // 5. Generate PDF
+        $pdf_url = render_section_pdf($output_data, $section_id, $template_html, $user_id);
+
+        // 6. Save the PDF link
+        $scores_json = get_post_meta($existing_post_id, 'scores', true);
+        $scores = json_decode($scores_json, true);
+        if (!is_array($scores)) $scores = [];
+        $scores[] = [
+            'date' => date('Y-m-d'),
+            'pdf'  => $pdf_url
+        ];
+        update_post_meta($existing_post_id, 'scores', json_encode($scores));
+        update_post_meta($existing_post_id, 'pdf_link', $pdf_url);
+    }
 }
 
 
