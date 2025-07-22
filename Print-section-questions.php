@@ -645,9 +645,13 @@ function handle_generate_pdf_request() {
     update_post_meta($post_id, 'scores', json_encode($scores));
 
     // ✅ AJAX Response
-    if (!empty($_GET['ajax'])) {
-        wp_send_json_success(['pdf_url' => $pdf_url]);
-    }
+	if (!empty($_GET['ajax'])) {
+		wp_send_json_success([
+			'pdf_url' => $pdf_url,
+			'preview_html' => $safe_html // Send the raw HTML content
+		]);
+	}
+
 
     // ✅ Redirect for normal requests
     wp_redirect(home_url("/account/section/?sid={$section_id}&generated=1"));
