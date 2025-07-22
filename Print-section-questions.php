@@ -298,7 +298,7 @@ function render_form_output($data, $section_id, $user_id, $success, $error_messa
 			// Show the button to generate
 			$pdf_url = home_url('/generate-pdf/?sid=' . $section_id . '&uid=' . $user_id);
 			echo '<div style="margin-top:20px; text-align:center;">';
-			echo '<a href="' . esc_url($pdf_url) . '" class="button">Generate PDF</a>';
+			echo '<a href="' . esc_url($pdf_url) . '" class="button generate_pdf_button">Generate PDF</a>';
 			echo '</div>';
 		}
 	}
@@ -1068,12 +1068,6 @@ function extract_json_from_string($text) {
 
 	return null;
 }
-
-
-
-
-
-
 
 
 
