@@ -298,7 +298,7 @@ function render_form_output($data, $section_id, $user_id, $success, $error_messa
 			// Show the button to generate
 			$pdf_url = home_url('/generate-pdf/?sid=' . $section_id . '&uid=' . $user_id);
 			echo '<div style="margin-top:20px; text-align:center;">';
-			echo '<button id="generate-pdf-btn" data-section-id="<?php echo $section_id; ?>">Generate PDF</button>';
+			echo '<button class="submit-btn-style" id="generate-pdf-btn" data-section-id="' . $section_id . '">Generate PDF</button>';
 			echo '</div>';
 		}
 	}
@@ -332,22 +332,26 @@ function build_explanations_html($explanations) {
 
 
 function render_form_fields($data, $section_id, $section_type, $user_answers) {
-	echo '<form method="post" class="section-form">';
-	echo '<input type="hidden" name="section_id" value="' . esc_attr($section_id) . '">';
-	if (!empty($data['section_title'])) echo '<h2>' . esc_html($data['section_title']) . '</h2>';
-	if (!empty($data['instructions'])) echo '<p><em>' . esc_html($data['instructions']) . '</em></p>';
+    echo '<form method="post" class="section-form" id="section-form">';
+    echo '<input type="hidden" name="section_id" value="' . esc_attr($section_id) . '">';
+    
+    if (!empty($data['section_title'])) echo '<h2>' . esc_html($data['section_title']) . '</h2>';
+    if (!empty($data['instructions'])) echo '<p><em>' . esc_html($data['instructions']) . '</em></p>';
 
-	foreach ($data['items'] as $item) {
-		echo '<div class="form-group">';
-		if (!empty($item['title'])) echo '<p class="question-header">' . esc_html($item['title']) . '</p>';
-		foreach ($item['fields'] as $field) render_field_input($field, $user_answers, $section_type);
-		echo '</div>';
-	}
-	echo '<div class="form-actions" style="text-align:right;">';
-	echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers') . '</button>';
-	echo '</div>';
-	echo '</form>';
+    foreach ($data['items'] as $item) {
+        echo '<div class="form-group">';
+        if (!empty($item['title'])) echo '<p class="question-header">' . esc_html($item['title']) . '</p>';
+        foreach ($item['fields'] as $field) render_field_input($field, $user_answers, $section_type);
+        echo '</div>';
+    }
+
+    echo '<div class="form-actions" style="text-align:right; position:relative;">';
+    echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers?') . '</button>';
+    echo '<span class="save-status" style="display:none; margin-left:10px; font-weight:bold;"></span>';
+    echo '</div>';
+    echo '</form>';
 }
+
 
 
 function render_field_input($field, $user_answers, $section_type) {
@@ -377,6 +381,41 @@ function render_field_input($field, $user_answers, $section_type) {
 	echo '</div>';
 }
 
+add_action('wp_ajax_save_section_answers', 'ajax_save_section_answers');
+function ajax_save_section_answers() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('You must be logged in.');
+    }
+
+    if (empty($_POST['section_id']) || empty($_POST['answers'])) {
+        wp_send_json_error('Missing data.');
+    }
+
+    $section_id = intval($_POST['section_id']);
+    $user_id    = get_current_user_id();
+    $answers    = array_map('sanitize_text_field', $_POST['answers']);
+
+    // Fetch data and existing answers
+    $data = get_section_data($section_id);
+    if (!$data) {
+        wp_send_json_error('Invalid section.');
+    }
+    list($user_answers, $existing_post_id) = get_existing_answers($user_id, $section_id);
+
+    // Reuse your current submission logic
+    list($error_message, $success, $score_message, $explanations, $user_answers) =
+        handle_form_submission($data, $answers, $section_id, $user_id, $existing_post_id);
+
+    // Send response
+    if ($success) {
+        wp_send_json_success([
+            'message'      => $score_message ?: 'Answers saved successfully!',
+            'explanations' => build_explanations_html($explanations)
+        ]);
+    } else {
+        wp_send_json_error($error_message ?: 'Failed to save answers.');
+    }
+}
 
 
 
@@ -561,7 +600,7 @@ add_action('template_redirect', 'handle_generate_pdf_request');
 function handle_generate_pdf_request() {
     if (!isset($_GET['sid']) || !is_user_logged_in()) return;
 
-    // Only run on the /generate-pdf/ page (except if it's an AJAX request)
+    // Only run on the /generate-pdf/ page (unless it's an AJAX call)
     if (!is_page('generate-pdf') && empty($_GET['ajax'])) return;
 
     $section_id = intval($_GET['sid']);
@@ -578,9 +617,9 @@ function handle_generate_pdf_request() {
     ]);
 
     if (!$query->have_posts()) {
-        $error_msg = '❌ No saved answers found for this section.';
-        if (!empty($_GET['ajax'])) wp_send_json_error($error_msg);
-        echo $error_msg;
+        $error = '❌ No saved answers found for this section.';
+        if (!empty($_GET['ajax'])) wp_send_json_error($error);
+        echo $error;
         exit;
     }
 
@@ -591,9 +630,9 @@ function handle_generate_pdf_request() {
     $openai_json = call_openai_api($prompt);
 
     if (empty($openai_json)) {
-        $error_msg = '❌ OpenAI response was empty.';
-        if (!empty($_GET['ajax'])) wp_send_json_error($error_msg);
-        echo $error_msg;
+        $error = '❌ OpenAI response was empty.';
+        if (!empty($_GET['ajax'])) wp_send_json_error($error);
+        echo $error;
         exit;
     }
 
@@ -601,62 +640,84 @@ function handle_generate_pdf_request() {
 
     // 🧠 Decode OpenAI response
     $output_data = json_decode($openai_json, true);
+
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($output_data)) {
-        $error_msg = '❌ Invalid JSON returned from OpenAI.';
-        if (!empty($_GET['ajax'])) wp_send_json_error($error_msg);
-        echo $error_msg;
+        error_log('🔴 JSON Decode Error: ' . json_last_error_msg());
+        error_log('🔴 Raw OpenAI Response: ' . $openai_json);
+        $error = '❌ Invalid JSON returned from OpenAI.';
+        if (!empty($_GET['ajax'])) wp_send_json_error($error);
+        echo $error;
         exit;
     }
 
     // 🚨 Check if OpenAI returned an error object
     if (isset($output_data['error'])) {
-        $error_msg = '❌ OpenAI error: ' . esc_html($output_data['error']['message'] ?? 'Unknown error');
-        if (!empty($_GET['ajax'])) wp_send_json_error($error_msg);
-        echo $error_msg;
+        error_log('🔴 OpenAI error: ' . print_r($output_data['error'], true));
+        $error = '❌ OpenAI error: ' . esc_html($output_data['error']['message'] ?? 'Unknown error');
+        if (!empty($_GET['ajax'])) wp_send_json_error($error);
+        echo $error;
         exit;
     }
+
+    error_log('✅ Decoded OpenAI Output: ' . print_r($output_data, true));
 
     // 📄 Fetch the PDF template from section meta
     $template_html = get_post_meta($section_id, 'pdf_template', true);
     if (!$template_html) {
-        $error_msg = '❌ No PDF template found.';
-        if (!empty($_GET['ajax'])) wp_send_json_error($error_msg);
-        echo $error_msg;
+        $error = '❌ No PDF template found.';
+        if (!empty($_GET['ajax'])) wp_send_json_error($error);
+        echo $error;
         exit;
     }
 
     // 🔁 Replace placeholders using flattening
     $flattened = flatten_placeholders($output_data);
+    error_log('🧩 Available placeholders: ' . print_r(array_keys($flattened), true));
+
     foreach ($flattened as $key => $value) {
         $template_html = str_replace($key, $value, $template_html);
     }
 
     // ✅ Convert to TCPDF-safe HTML and render PDF
     $safe_html = convert_to_tcpdf_html($template_html);
+
+    // Save HTML for preview
+    update_post_meta($post_id, 'pdf_html', $safe_html);
+
+    // Generate the PDF
     $pdf_url = render_section_pdf($output_data, $section_id, $safe_html, $user_id);
 
     // 🔁 Get existing scores from post meta
     $scores_json = get_post_meta($post_id, 'scores', true);
     $scores = json_decode($scores_json, true);
+
+    // 🧩 Ensure it's an array
     if (!is_array($scores)) $scores = [];
 
     // 📌 Append the new entry
-    $scores[] = ['date' => date('Y-m-d'), 'pdf' => $pdf_url];
+    $current_date = date('Y-m-d');
+    $scores[] = [
+        'date' => $current_date,
+        'pdf'  => $pdf_url
+    ];
+
+    // 💾 Save back to post meta
     update_post_meta($post_id, 'scores', json_encode($scores));
+    update_post_meta($post_id, 'pdf_link', $pdf_url);
 
-    // ✅ AJAX Response
-	if (!empty($_GET['ajax'])) {
-		wp_send_json_success([
-			'pdf_url' => $pdf_url,
-			'preview_html' => $safe_html // Send the raw HTML content
-		]);
-	}
+    // ✅ If this was an AJAX request, return JSON
+    if (!empty($_GET['ajax'])) {
+        wp_send_json_success([
+            'pdf_url'      => $pdf_url,
+            'preview_html' => $safe_html
+        ]);
+    }
 
-
-    // ✅ Redirect for normal requests
+    // ✅ Redirect back to section form after PDF generation
     wp_redirect(home_url("/account/section/?sid={$section_id}&generated=1"));
     exit;
 }
+
 
 
 
