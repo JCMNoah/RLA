@@ -346,7 +346,7 @@ function render_form_fields($data, $section_id, $section_type, $user_answers) {
     }
 
     echo '<div class="form-actions" style="text-align:right; position:relative;">';
-    echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers?') . '</button>';
+    echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers') . '</button>';
     echo '<span class="save-status" style="display:none; margin-left:10px; font-weight:bold;"></span>';
     echo '</div>';
     echo '</form>';
