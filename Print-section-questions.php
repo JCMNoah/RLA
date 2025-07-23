@@ -186,127 +186,89 @@ function save_answers($answers, $user_id, $section_id, $existing_post_id, $is_co
 
 
 
-function render_form_output($data, $section_id, $user_id, $success, $error_message, $score_message, $explanations, $user_answers, $existing_post_id, $generated_mode=false) {
-	$lesson_id = get_post_meta($section_id, 'lesson_id', true);
-	$module_id = $lesson_id ? get_post_meta($lesson_id, 'module_id', true) : null;
-	$lesson_order = $lesson_id ? get_post_meta($lesson_id, 'lesson_order', true) : null;
-	$module_number = $module_id ? get_post_meta($module_id, 'module_number', true) : null;
-	$section_type = get_post_meta($section_id, 'section_type', true);
+function render_form_output($data, $section_id, $user_id, $success, $error_message, $score_message, $explanations, $user_answers, $existing_post_id, $generated_mode = false) {
+    $lesson_id = get_post_meta($section_id, 'lesson_id', true);
+    $module_id = $lesson_id ? get_post_meta($lesson_id, 'module_id', true) : null;
+    $lesson_order = $lesson_id ? get_post_meta($lesson_id, 'lesson_order', true) : null;
+    $module_number = $module_id ? get_post_meta($module_id, 'module_number', true) : null;
+    $section_type = get_post_meta($section_id, 'section_type', true);
 
-	ob_start();
-	echo '<div class="side-padding form-page">';
-	
-	
-	if ($generated_mode && $existing_post_id) {
-		$html_content = get_post_meta($existing_post_id, 'pdf_html', true);
-		$pdf_url = get_post_meta($existing_post_id, 'pdf_link', true);
+    ob_start();
+    echo '<div class="side-padding form-page">';
 
-		if ($html_content) {
-			echo '<div class="notice success">Your responses have been saved as a PDF. You can download it below.</div>';
-			echo '<div style="margin-bottom:20px;"><a href="' . esc_url($pdf_url) . '" class="button" target="_blank">Download PDF</a></div>';
-			echo '<div class="pdf-html-content">' . wp_kses_post($html_content) . '</div>';
-			echo '</div>'; // close .side-padding
-			return ob_get_clean();
-		}
-	}
-	
-	
-	echo '<p>Module ' . esc_html($module_number) . ' Lesson ' . esc_html($lesson_order) . '</p>';
-	if ($success && $section_type !== 'quiz') echo '<div class="notice success">Your answers have been saved.</div>';
-	if ($error_message) echo '<div class="notice error">' . esc_html($error_message) . '</div>';
+    // Display PDF if already generated
+    if ($generated_mode && $existing_post_id) {
+        $html_content = get_post_meta($existing_post_id, 'pdf_html', true);
+        $pdf_url = get_post_meta($existing_post_id, 'pdf_link', true);
 
-	$template_html = '';
-	if ($section_type === 'quiz' && $success) {
-		
-		// 🔍 Get the latest score with PDF link
-		$args = [
-			'post_type'   => 'lesson_answer',
-			'post_status' => 'publish',
-			'author'      => $user_id,
-			'meta_query'  => [
-				[
-					'key'     => 's_id',
-					'value'   => $section_id,
-					'compare' => '='
-				]
-			],
-			'numberposts' => 1
-		];
+        if ($html_content) {
+            echo '<div class="notice success">Your responses have been saved as a PDF. You can download it below.</div>';
+            echo '<div style="margin-bottom:20px;"><a href="' . esc_url($pdf_url) . '" class="button" target="_blank">Download PDF</a></div>';
+            echo '<div class="pdf-html-content">' . wp_kses_post($html_content) . '</div>';
+            echo '</div>'; // close .side-padding
+            return ob_get_clean();
+        }
+    }
 
-		$answers = get_posts($args);
-		$pdf_link = '';
+    echo '<p>Module ' . esc_html($module_number) . ' Lesson ' . esc_html($lesson_order) . '</p>';
+    if ($success && $section_type !== 'quiz') echo '<div class="notice success">Your answers have been saved.</div>';
+    if ($error_message) echo '<div class="notice error">' . esc_html($error_message) . '</div>';
 
-		if (!empty($answers)) {
-			$scores_json = get_post_meta($answers[0]->ID, 'scores', true);
-			$scores = json_decode($scores_json, true);
+    $template_html = '';
+    if ($section_type === 'quiz' && $success) {
+        // Display quiz score and PDF link
+        $args = [
+            'post_type'   => 'lesson_answer',
+            'post_status' => 'publish',
+            'author'      => $user_id,
+            'meta_query'  => [
+                [
+                    'key'     => 's_id',
+                    'value'   => $section_id,
+                    'compare' => '='
+                ]
+            ],
+            'numberposts' => 1
+        ];
 
-			if (is_array($scores) && !empty($scores)) {
-				$last_entry = end($scores);
-				if (!empty($last_entry['pdf'])) {
-					$pdf_link = esc_url($last_entry['pdf']);
-				}
-			}
-		}
+        $answers = get_posts($args);
+        $pdf_link = '';
 
-		if (!empty($pdf_link)) {
-			echo '<div class="notice success" style="margin-top:20px;">';
-			echo '<strong>Your review has been saved as a PDF:</strong><br>';
-			echo '<a href="' . $pdf_link . '" target="_blank">Download Your Quiz Review PDF</a>';
-			echo '</div>';
-		}
+        if (!empty($answers)) {
+            $scores_json = get_post_meta($answers[0]->ID, 'scores', true);
+            $scores = json_decode($scores_json, true);
 
-		
-		
-		
-		//if ($score_message) {
-			$template_html .= '<div class="notice success">' . $score_message . '</div>';
-		//}
+            if (is_array($scores) && !empty($scores)) {
+                $last_entry = end($scores);
+                if (!empty($last_entry['pdf'])) {
+                    $pdf_link = esc_url($last_entry['pdf']);
+                }
+            }
+        }
 
-		echo $template_html;
-		
-		// Just display the HTML (no PDF generation here)
-		echo build_explanations_html($explanations);
-		
-		
+        if (!empty($pdf_link)) {
+            echo '<div class="notice success" style="margin-top:20px;">';
+            echo '<strong>Your review has been saved as a PDF:</strong><br>';
+            echo '<a href="' . $pdf_link . '" target="_blank">Download Your Quiz Review PDF</a>';
+            echo '</div>';
+        }
 
-	}
+        $template_html .= '<div class="notice success">' . $score_message . '</div>';
+        echo $template_html;
 
-	// ✅ Only show form if not already submitted or PDF generated
-	$has_generated = isset($_GET['generated']) && $_GET['generated'] == '1';
-	if (!$success && !$has_generated) {
-		render_form_fields($data, $section_id, $section_type, $user_answers);
-	}
+        echo build_explanations_html($explanations);
+    }
 
+    // Show form
+    $has_generated = isset($_GET['generated']) && $_GET['generated'] == '1';
+    if (!$success && !$has_generated) {
+        render_form_fields($data, $section_id, $section_type, $user_answers, $existing_post_id);
+    }
 
-	// Show Generate PDF button for completed non-quiz sections
-	if ($section_type !== 'quiz' && !empty($existing_post_id) && get_post_meta($existing_post_id, 'is_completed', true)) {
-		if (isset($_GET['generated']) && $_GET['generated'] == '1') {
-			// Fetch the latest PDF from scores
-			$scores_json = get_post_meta($existing_post_id, 'scores', true);
-			$scores = json_decode($scores_json, true);
-
-			if (is_array($scores) && !empty($scores)) {
-				$last_score = end($scores);
-				if (!empty($last_score['pdf'])) {
-					echo '<div class="notice success" style="margin-top:20px;">';
-					echo '<strong>Your PDF has been generated:</strong><br>';
-					echo '<a href="' . esc_url($last_score['pdf']) . '" target="_blank">Download PDF</a>';
-					echo '</div>';
-				}
-			}
-		} else {
-			// Show the button to generate
-			$pdf_url = home_url('/generate-pdf/?sid=' . $section_id . '&uid=' . $user_id);
-			echo '<div style="margin-top:20px; text-align:center;">';
-			echo '<button class="submit-btn-style" id="generate-pdf-btn" data-section-id="' . $section_id . '">Generate PDF</button>';
-			echo '</div>';
-		}
-	}
-
-
-	echo '</div>';
-	return ob_get_clean();
+    echo '</div>';
+    return ob_get_clean();
 }
+
 
 
 
@@ -331,7 +293,7 @@ function build_explanations_html($explanations) {
 
 
 
-function render_form_fields($data, $section_id, $section_type, $user_answers) {
+function render_form_fields($data, $section_id, $section_type, $user_answers, $existing_post_id) {
     echo '<form method="post" class="section-form" id="section-form">';
     echo '<input type="hidden" name="section_id" value="' . esc_attr($section_id) . '">';
     
@@ -345,10 +307,18 @@ function render_form_fields($data, $section_id, $section_type, $user_answers) {
         echo '</div>';
     }
 
-    echo '<div class="form-actions" style="text-align:right; position:relative;">';
-    echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers') . '</button>';
-    echo '<span class="save-status" style="display:none; margin-left:10px; font-weight:bold;"></span>';
-    echo '</div>';
+	echo '<div class="form-actions" style="display:flex; justify-content:flex-end; gap:10px; align-items:center;">';
+
+
+	// Only show PDF button for completed non-quiz sections
+	if ($section_type !== 'quiz' && !empty($existing_post_id) && get_post_meta($existing_post_id, 'is_completed', true)) {
+		echo '<button type="button" id="generate-pdf-btn" class="submit-btn submit-btn-style" data-section-id="' . $section_id . '">Generate PDF</button>';
+	}
+
+	// Save or Score button
+	echo '<button type="submit" class="submit-btn">' . ($section_type === 'quiz' ? 'Score Quiz' : 'Save Answers') . '</button>';
+	echo '<span class="save-status" style="display:none; margin-left:10px; font-weight:bold;"></span>';
+	echo '</div>';
     echo '</form>';
 }
 
@@ -491,6 +461,11 @@ function save_quiz_score($user_id, $section_id, $correct, $total, $pdf_link = ''
 	$scores = array_slice($scores, -3);
 
 	update_post_meta($existing_post_id, 'scores', json_encode($scores));
+
+	//Testing
+	console.log("Its about to happen");
+	wp_die();
+
 
 	// 🗑️ Delete or archive old PDF
 	if (!empty($oldest['pdf'])) {
